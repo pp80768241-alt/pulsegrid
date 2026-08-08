@@ -1,0 +1,93 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pulse_user
+      POSTGRES_PASSWORD: pulse_pass
+      POSTGRES_DB: pulsegrid
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pulse_user -d pulsegrid"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Two identical API replicas — this is the "horizontal scaling" part.
+  # Both stay in sync purely through Redis + Postgres, never talking to
+  # each other directly.
+  backend_1:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgresql://pulse_user:pulse_pass@db:5432/pulsegrid
+      REDIS_URL: redis://redis:6379/0
+      HOSTNAME: backend_1
+
+  backend_2:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgresql://pulse_user:pulse_pass@db:5432/pulsegrid
+      REDIS_URL: redis://redis:6379/0
+      HOSTNAME: backend_2
+
+  # Separate, independently-scalable worker for async notification delivery.
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    command: ["python", "-m", "app.worker"]
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgresql://pulse_user:pulse_pass@db:5432/pulsegrid
+      REDIS_URL: redis://redis:6379/0
+      HOSTNAME: worker_1
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - backend_1
+      - backend_2
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8080:80"
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - nginx
+    environment:
+      VITE_API_BASE: http://localhost:8080
+      VITE_WS_BASE: ws://localhost:8080
+    ports:
+      - "5173:5173"
+
+volumes:
+  pgdata:

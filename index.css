@@ -1,0 +1,34 @@
+:root {
+  --bg: #0d1021;
+  --panel: #151a33;
+  --panel-raised: #1c2242;
+  --line: #2b3260;
+  --text: #e9ecf9;
+  --text-dim: #8891bd;
+  --pulse: #7c6df2;
+  --pulse-bright: #a99cff;
+  --online: #4fe3c1;
+  --warn: #ff8a5b;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Inter", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background-image: radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0);
+  background-size: 28px 28px;
+  background-attachment: fixed;
+}
+
+#root { min-height: 100vh; }
+
+::selection { background: var(--pulse); color: #0d1021; }
+
+.mono { font-family: "JetBrains Mono", monospace; }
